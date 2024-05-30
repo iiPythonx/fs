@@ -77,7 +77,8 @@ const commands = {
         file_input.click();
     },
     recv: async (file_id) => {
-        file_id = file_id || await wait_for_input("File ID:");
+        file_id = file_id || await wait_for_input("File ID (or paste link):")
+        if (file_id.includes("http")) file_id = file_id.split("/")[4];
         const file = await (await fetch(`/api/find/${file_id}`)).json();
         if (file.code === 404) return add_line("Invalid File ID.", "r");
 
@@ -86,7 +87,14 @@ const commands = {
         add_line(`${file.file}${file.iv ? ', encrypted' : ''}, ${convert_size(file.size)}, ${convert_size(chunk_size)} chunks`);
 
         // Handle downloading
-        await download_file(`${file_id}/${file.file}`, chunk_size, file.iv, file.salt, file.iv ? await wait_for_input("Password:", false) : null);
+        await download_file(
+            `${file_id}/${file.file}`,
+            file.size,
+            chunk_size,
+            file.iv,
+            file.salt,
+            file.iv ? await wait_for_input("Password:", false) : null
+        );
     },
     delete: async (access_token) => {
         access_token = access_token || await wait_for_input("Access token:");
@@ -229,7 +237,8 @@ async function upload_file(file, encryption_password) {
     };
     element.addEventListener("click", handle_reveal);
 }
-async function download_file(file, chunk_size, iv, salt, password) {
+
+async function download_file(file, size, chunk_size, iv, salt, password) {
 
     // Handle decryption
     let decrypt = (d) => d;
@@ -251,7 +260,16 @@ async function download_file(file, chunk_size, iv, salt, password) {
         
         // Handle AES overhead
         chunk_size += 16;
-        decrypt = (d) => crypto.subtle.decrypt({ "name": "AES-GCM", iv }, key, d);
+        decrypt = (d) => new Promise((resolve, reject) => {
+            crypto.subtle.decrypt({ "name": "AES-GCM", iv }, key, d)
+                .then((data) => resolve(data))
+                .catch(() => {
+                    add_line("Invalid decryption password was entered.", "r");
+                    console.error("The decryption failed, so fuck you in particular I guess.");
+                    cleanup(false);
+                    reject("¯\\_(ツ)_/¯");
+                });
+        });
     }
 
     // Hide input line while downloading
@@ -261,7 +279,26 @@ async function download_file(file, chunk_size, iv, salt, password) {
     const file_stream = streamSaver.createWriteStream(file.split("/").at(-1));
     const writer = file_stream.getWriter();
 
+    window.addEventListener("unload", () => writer.abort());
+
+    // Handle progress bar
+    add_line(`<span id = "progress">[${" ".repeat(44)}]</span>`);
+    const progress = document.getElementById("progress");
+
+    let downloaded = 0;
+    const update_progress = () => {
+        const blocks = "#".repeat(Math.floor((downloaded / size) * 44));
+        progress.innerHTML = `[${blocks}${"&nbsp;".repeat(44 - blocks.length)}] ${Math.round((downloaded / size) * 100)}%`;
+    }
+
     // Start file download
+    const cleanup = (write = true) => {
+        update_progress();
+        if (write) writer.close();
+        progress.remove();
+        elements.input_line.style.display = "block";
+    }
+
     const reader = (await fetch(`/d/${file}`)).body.getReader();
     const append_buffer = (b1, b2) => {
         let tmp = new Uint8Array(b1.byteLength + b2.byteLength);
@@ -269,26 +306,33 @@ async function download_file(file, chunk_size, iv, salt, password) {
         tmp.set(new Uint8Array(b2), b1.byteLength);
         return tmp.buffer;
     };
-    let current_chunk = new ArrayBuffer(0);
+    let current_chunk = new ArrayBuffer(0), errored = false;
     const stream = new ReadableStream({
         start(controller) {
             function push() {
                 reader.read().then(async ({ done, value }) => {
                     if (done) {
-                        writer.write(new Uint8Array(await decrypt(current_chunk)));
-                        controller.close();
-                        writer.close();
-                        return;
+                        if (current_chunk.byteLength > 0) {
+                            writer.write(new Uint8Array(await decrypt(current_chunk)))
+                                .then(() => { downloaded += current_chunk.byteLength; cleanup(); })
+                                .catch(() => { if (!errored) add_line("How dare you just cancel my file prompt?", "r"); });
+                            return;
+                        }
+                        return cleanup();
                     }
 
                     // Add to current chunk
                     current_chunk = append_buffer(current_chunk, value.buffer);
-                    console.log(current_chunk.byteLength, chunk_size)
                     if (current_chunk.byteLength > chunk_size) {
-                        writer.write(new Uint8Array(await decrypt(current_chunk.slice(0, chunk_size))));
+                        writer.write(new Uint8Array(await decrypt(current_chunk.slice(0, chunk_size)))).catch(() => {
+                            if (errored) return;
+                            add_line("How dare you just cancel my file prompt?", "r")
+                            errored = true;
+                        });
                         current_chunk = current_chunk.slice(chunk_size);
+                        downloaded += chunk_size;
                     }
-                    controller.enqueue(value);
+                    update_progress();
                     push();
                 });
             }
@@ -296,5 +340,4 @@ async function download_file(file, chunk_size, iv, salt, password) {
         },
     });
     new Response(stream);
-    elements.input_line.style.display = "block";
 }

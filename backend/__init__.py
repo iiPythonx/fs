@@ -59,7 +59,6 @@ async def handle_upload_chunk(file: UploadFile, file_id: str) -> JSONResponse:
     # Check filesize
     file.file.seek(0, 2)
     chunk_size = file.file.tell()
-    print("CHUNK SIZE:",chunk_size)
     if chunk_size / megabyte > 100:
         delete_file(file_id)
         return JSONResponse({"code": 400, "message": "Chunk exceeds the 100 MB size limit."}, status_code = 400)

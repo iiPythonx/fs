@@ -1,6 +1,7 @@
 # Copyright (c) 2024 iiPython
 
 # Modules
+import json
 import shutil
 import string
 from pathlib import Path
@@ -8,15 +9,15 @@ from pathlib import Path
 from redis import Redis
 
 # Initialization
+config = json.loads((Path(__file__).parents[1] / "config.json").read_text())
 redis = Redis(
-    host = "192.168.0.10",
-    password = "d7f6925d75c16a69a7321f85e01624d6d90e022eef43babd4c60b75155a923d6",
+    host = config["redis_host"],
+    password = config["redis_pswd"],
     decode_responses = True
 )
 
 # Handle path locations
-upload_location = Path("/run/media/benjamin/942ae1d6-97c6-4d22-9f80-a1ad583ed547/uploads")
-# upload_location = Path(__file__).parent / "uploads"
+upload_location = Path(config["upload_dir"])
 upload_location.mkdir(exist_ok = True)
 allowed_characters = string.ascii_letters + string.digits + "_.-"
 

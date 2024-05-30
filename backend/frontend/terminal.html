@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset = "utf-8">
+
+        <!-- CSS -->
+        <link rel = "stylesheet" href = "terminal.css">
+  
+        <title>Terminal</title>
+    </head>
+    <body>
+        <div id = "terminal">
+            <span class = "title">iiPython™ File System v0.3.0-beta :3</span>
+            <div style = "margin: 40px;"></div>
+            <p>Available commands: <span class = "cg">send</span>, <span class = "cg">recv</span>, <span class = "cg">delete</span>, <span class = "cg">encryption</span>.</p>
+            <p>Copyright (c) 2024 <a href = "https://iipython.dev">iiPython</a>.</p>
+            <div style = "margin: 40px;"></div>
+        </div>
+        <p id = "full_input"><span id = "prompt">%</span> <span id = "input"></span><span id = "blink">_</span></p>
+
+        <!-- JS -->
+        <script src = "https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
+        <script src = "https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
+        <script src = "client.js" async defer></script>
+    </body>
+</html>

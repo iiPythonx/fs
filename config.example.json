@@ -1,5 +1,7 @@
 {
-    "redis_host": "127.0.0.1",
-    "redis_pswd": "oogabooga",
-    "upload_dir": "./backend/uploads"
+    "redis": {
+        "host": "127.0.0.1",
+        "password": "oogabooga123"
+    },
+    "uploads": "backend/uploads"
 }

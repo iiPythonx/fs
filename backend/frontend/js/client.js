@@ -1,42 +1,9 @@
 // Copyright (c) 2024 iiPython
 
-// Initialization
-const elements = {
-    term:       document.getElementById("terminal"),
-    prompt:     document.getElementById("prompt"),
-    command:    document.getElementById("input"),
-    input_line: document.getElementById("full_input"),
-    scroll:     document.scrollingElement || document.body,
-}
-const options = {
-    echo: true,  // Enable line echoing
-    call: null,  // Enable command callback
-}
-
 // Encryption
 if (!localStorage.getItem("encryption_enabled")) localStorage.setItem("encryption_enabled", "0");
 
 // Assistant methods
-function add_line(line, color) {
-    elements.term.insertAdjacentHTML("beforeend", `<p>${color ? `<span class = "c${color}">${line}</span>` : line}</p>`);
-    elements.scroll.scrollTop = elements.scroll.scrollHeight;
-}
-function wait_for_input(prompt, echo = true) {
-    return new Promise((resolve) => {
-        options.echo = echo || false;
-        options.call = (a) => {
-            resolve(a);
-            options.echo = true;
-        }
-        elements.prompt.innerText = prompt;
-    });
-}
-function wait_for_confirmation(prompt, fallback = "y") {
-    const fallback_string = fallback === "y" ? "(Y/n)" : "(y/N)";
-    return new Promise(async resolve => {
-        return resolve(["yes", "y"].includes((await wait_for_input(`${prompt} ${fallback_string}?`, false)) || fallback));
-    });
-}
 function convert_size(bytes) {
     if (Math.abs(bytes) < 1024) return `${bytes} B`;
     let u = -1;
@@ -47,44 +14,44 @@ function convert_size(bytes) {
 // Command handling
 const commands = {
     send: () => {
-        elements.input_line.style.display = "none";
+        elements.line.style.display = "none";
 
         // Handle file input
         const file_input = document.createElement("input");
         file_input.type = "file";
         file_input.addEventListener("change", async (e) => {
-            elements.input_line.style.display = "block";
+            elements.line.style.display = "block";
 
             // Show file information
             const file = e.target.files[0];
-            add_line(`${file.name}, ${file.type || 'unknown format'}, ${convert_size(file.size)}`);
-            if (file.size > 5242880000) return add_line("File is too large, max size is 5 GB.", "r");
+            write_line(`${file.name}, ${file.type || 'unknown format'}, ${convert_size(file.size)}`);
+            if (file.size > 5242880000) return write_line("File is too large, max size is 5 GB.", "r");
 
             // Handle file uploading
-            if (!(await wait_for_confirmation("Confirm upload"))) return;
-            if (+localStorage.getItem("encryption_enabled") && await wait_for_confirmation("Encrypt this file", "n")) {
-                await upload_file(file, await wait_for_input("Encryption password:", false));
+            if (!(await confirm("Confirm upload"))) return;
+            if (+localStorage.getItem("encryption_enabled") && await confirm("Encrypt this file", "n")) {
+                await upload_file(file, await input("Encryption password:", false));
             } else {
                 await upload_file(file);
             }
             file_input.remove();
         });
         file_input.addEventListener("cancel", () => {
-            add_line("File selection was canceled.", "r");
-            elements.input_line.style.display = "block";
+            write_line("File selection was canceled.", "r");
+            elements.line.style.display = "block";
             file_input.remove();
         });
         file_input.click();
     },
     recv: async (file_id) => {
-        file_id = file_id || await wait_for_input("File ID (or paste link):")
+        file_id = file_id || await input("File ID (or paste link):")
         if (file_id.includes("http")) file_id = file_id.split("/")[4];
         const file = await (await fetch(`/api/find/${file_id}`)).json();
-        if (file.code === 404) return add_line("Invalid File ID.", "r");
+        if (file.code === 404) return write_line("Invalid File ID.", "r");
 
         // Show file information
         const chunk_size = calculate_chunk_size(file.size);
-        add_line(`${file.file}${file.iv ? ', encrypted' : ''}, ${convert_size(file.size)}, ${convert_size(chunk_size)} chunks`);
+        write_line(`${file.file}${file.iv ? ', encrypted' : ''}, ${convert_size(file.size)}, ${convert_size(chunk_size)} chunks`);
 
         // Handle downloading
         await download_file(
@@ -93,27 +60,27 @@ const commands = {
             chunk_size,
             file.iv,
             file.salt,
-            file.iv ? await wait_for_input("Password:", false) : null
+            file.iv ? await input("Password:", false) : null
         );
     },
     delete: async (access_token) => {
-        access_token = access_token || await wait_for_input("Access token:");
+        access_token = access_token || await input("Access token:");
         const result = await (await fetch(`/api/delete/${access_token}`, { method: "DELETE" })).json();
-        if (result.code === 403) return add_line("Invalid access token.", "r");
-        add_line(`File with ID ${result.id} was deleted.`);
+        if (result.code === 403) return write_line("Invalid access token.", "r");
+        write_line(`File with ID ${result.id} was deleted.`);
     },
     encryption: async (new_value) => {
-        new_value = new_value || await wait_for_confirmation("Enable encryption (beta)", "n");
+        new_value = new_value || await confirm("Enable encryption (beta)", "n");
         if (+new_value !== +localStorage.getItem("encryption_enabled")) {
             localStorage.setItem("encryption_enabled", +new_value + "");
-            return add_line(`Encryption setting updated to <span class = "c${new_value ? 'g' : 'r'}">${new_value.toString().toUpperCase()}</span>.`);
+            return write_line(`Encryption setting updated to <span class = "c${new_value ? 'g' : 'r'}">${new_value.toString().toUpperCase()}</span>.`);
         }
-        return add_line("Encryption setting unchanged.");
+        return write_line("Encryption setting unchanged.");
     }
 }
 
 function run_command(command) {
-    if (options.echo) add_line(`${elements.prompt.innerText} ${command}`);
+    if (options.echo) write_line(`${elements.prompt.innerText} ${command}`);
     elements.command.innerText = "";
 
     // Handle callbacks
@@ -127,19 +94,19 @@ function run_command(command) {
 
     // Run command
     const args = command.split(" ");
-    if (!commands[args[0]]) return add_line(`${args[0]}: command not found`, "r");
+    if (!commands[args[0]]) return write_line(`${args[0]}: command not found`, "r");
     commands[args[0]](...args.slice(1));
 }
 
 document.addEventListener("keydown", (e) => {
-    if (e.altKey || e.ctrlKey || e.metaKey || elements.input_line.style.display === "none") return;
+    if (e.altKey || e.ctrlKey || e.metaKey || elements.line.style.display === "none") return;
     if (e.key === "Enter") run_command(elements.command.innerText);
     if (e.key === "Backspace") elements.command.innerText = elements.command.innerText.slice(0, -1);
     if (e.key.length === 1 && elements.command.innerText.length < 148) elements.command.innerText += e.key;
 });
 document.addEventListener("paste", (e) => {
     const text = (e.clipboardData || window.clipboardData).getData("Text");
-    if (!text.length || elements.input_line.style.display === "none" || elements.command.innerText.length >= 148) return;
+    if (!text.length || elements.line.style.display === "none" || elements.command.innerText.length >= 148) return;
     elements.command.innerText += text;
 });
 
@@ -152,37 +119,22 @@ function calculate_chunk_size(file_size) {
     if (size_in_mb >= 100) return 20  * megabyte;
     return 5 * megabyte;
 }
-async function upload_file(file, encryption_password) {
+async function upload_file(file, password) {
 
     // Handle encryption
     let encrypt = (d) => d, iv = crypto.getRandomValues(new Uint8Array(12)), salt = crypto.getRandomValues(new Uint8Array(16));
-    if (encryption_password) {
-        const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(encryption_password), "PBKDF2", false, ["deriveBits", "deriveKey"]);
-        const key = await crypto.subtle.deriveKey(
-            {
-                name: "PBKDF2",
-                salt: salt,
-                iterations: 100000,
-                hash: "SHA-256",
-            },
-            material,
-            { name: "AES-GCM", length: 256 },
-            true,
-            ["encrypt", "decrypt"],
-        );
-        encrypt = (d) => crypto.subtle.encrypt({ "name": "AES-GCM", iv }, key, d);
-    }
+    if (password) encrypt = await generate_encryption_stream("encrypt", salt, iv, password);
 
     // Hide input line while uploading
-    elements.input_line.style.display = "none";
+    elements.line.style.display = "none";
 
     // Create progress bar
-    add_line(`<span id = "progress">[${" ".repeat(44)}]</span>`);
+    write_line(`<span id = "progress">[${" ".repeat(44)}]</span>`);
     const progress = document.getElementById("progress");
     const chunk_size = calculate_chunk_size(file.size);
 
     // Handle encryption parameters
-    const p = encryption_password ? `&header=${iv.join()}.${salt.join()}` : "";
+    const p = password ? `&header=${iv.join()}.${salt.join()}` : "";
 
     // Start file upload
     let total_sent = 0, error = false;
@@ -220,13 +172,13 @@ async function upload_file(file, encryption_password) {
         });
     }
     progress.remove();
-    elements.input_line.style.display = "block";
-    if (error) return add_line(`Upload Error: ${error}`, "r");
+    elements.line.style.display = "block";
+    if (error) return write_line(`Upload Error: ${error}`, "r");
 
     // Show results
     const result = await (await fetch(`/api/upload/${file_id}/finalize`, { method: "POST" })).json();
     const link = `${location.origin}/d/${result.file}`;
-    add_line(`<br>File link: <a href = "${link}" target = "_blank">${link}</a><br>Access token: <span data-token = "${result.token}" class = "reveal" id = "reveal-${file_id}">(click to reveal)</span>`);
+    write_line(`<br>File link: <a href = "${link}" target = "_blank">${link}</a><br>Access token: <span data-token = "${result.token}" class = "reveal" id = "reveal-${file_id}">(click to reveal)</span>`);
 
     // Handle click to reveal
     const element = document.getElementById(`reveal-${file_id}`);
@@ -243,37 +195,22 @@ async function download_file(file, size, chunk_size, iv, salt, password) {
     // Handle decryption
     let decrypt = (d) => d;
     if (iv) {
-        const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits", "deriveKey"]);
-        const key = await crypto.subtle.deriveKey(
-            {
-                name: "PBKDF2",
-                salt: new Uint8Array(salt.split(",").map(_ => Number(_))),
-                iterations: 100000,
-                hash: "SHA-256",
-            },
-            material,
-            { name: "AES-GCM", length: 256 },
-            true,
-            ["encrypt", "decrypt"],
-        );
-        iv = new Uint8Array(iv.split(",").map(_ => Number(_)));
+        salt = new Uint8Array(salt.split(",").map(_ => Number(_))), iv = new Uint8Array(iv.split(",").map(_ => Number(_)));
         
-        // Handle AES overhead
-        chunk_size += 16;
+        const _decrypt = await generate_encryption_stream("decrypt", salt, iv, password);
         decrypt = (d) => new Promise((resolve, reject) => {
-            crypto.subtle.decrypt({ "name": "AES-GCM", iv }, key, d)
-                .then((data) => resolve(data))
-                .catch(() => {
-                    add_line("Invalid decryption password was entered.", "r");
-                    console.error("The decryption failed, so fuck you in particular I guess.");
-                    cleanup(false);
-                    reject("¯\\_(ツ)_/¯");
-                });
+            _decrypt(d).then((data) => resolve(data)).catch(() => {
+                write_line("Invalid decryption password was entered.", "r");
+                console.error("The decryption failed, so fuck you in particular I guess.");
+                cleanup(false);
+                reject("¯\\_(ツ)_/¯");
+            });
         });
+        chunk_size += 16;  // Handle AES overhead
     }
 
     // Hide input line while downloading
-    elements.input_line.style.display = "none";
+    elements.line.style.display = "none";
 
     // Create file stream
     const file_stream = streamSaver.createWriteStream(file.split("/").at(-1));
@@ -282,7 +219,7 @@ async function download_file(file, size, chunk_size, iv, salt, password) {
     window.addEventListener("unload", () => writer.abort());
 
     // Handle progress bar
-    add_line(`<span id = "progress">[${" ".repeat(44)}]</span>`);
+    write_line(`<span id = "progress">[${" ".repeat(44)}]</span>`);
     const progress = document.getElementById("progress");
 
     let downloaded = 0;
@@ -296,7 +233,7 @@ async function download_file(file, size, chunk_size, iv, salt, password) {
         update_progress();
         if (write) writer.close();
         progress.remove();
-        elements.input_line.style.display = "block";
+        elements.line.style.display = "block";
     }
 
     const reader = (await fetch(`/d/${file}`)).body.getReader();
@@ -315,7 +252,7 @@ async function download_file(file, size, chunk_size, iv, salt, password) {
                         if (current_chunk.byteLength > 0) {
                             writer.write(new Uint8Array(await decrypt(current_chunk)))
                                 .then(() => { downloaded += current_chunk.byteLength; cleanup(); })
-                                .catch(() => { if (!errored) add_line("How dare you just cancel my file prompt?", "r"); });
+                                .catch(() => { if (!errored) write_line("How dare you just cancel my file prompt?", "r"); });
                             return;
                         }
                         return cleanup();
@@ -326,7 +263,7 @@ async function download_file(file, size, chunk_size, iv, salt, password) {
                     if (current_chunk.byteLength > chunk_size) {
                         writer.write(new Uint8Array(await decrypt(current_chunk.slice(0, chunk_size)))).catch(() => {
                             if (errored) return;
-                            add_line("How dare you just cancel my file prompt?", "r")
+                            write_line("How dare you just cancel my file prompt?", "r")
                             errored = true;
                         });
                         current_chunk = current_chunk.slice(chunk_size);

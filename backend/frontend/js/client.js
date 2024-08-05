@@ -110,6 +110,12 @@ document.addEventListener("paste", (e) => {
     elements.command.innerText += text;
 });
 
+// Handle click to use commands
+for (const command_element of document.querySelectorAll("span.cg")) {
+    command_element.style.cursor = "pointer";
+    command_element.addEventListener("click", () => elements.command.innerText = command_element.innerText);
+}
+
 // Handle uploading
 const megabyte = 1024 ** 2;
 function calculate_chunk_size(file_size) {

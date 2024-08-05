@@ -31,7 +31,7 @@ class UploadHandler():
         redis.set(f"access:{access_token}", file_id)
         return access_token
 
-    def register_active_upload(self, filename: str, iv: str = None, salt: str = None) -> str:
+    def register_active_upload(self, filename: str, iv: str | None = None, salt: str | None = None) -> str:
         encryption_data = {"iv": iv, "salt": salt} if iv is not None else {}
 
         # Handle path creation

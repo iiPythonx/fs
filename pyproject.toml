@@ -1,6 +1,6 @@
 [project]
 name = "iipython-fs"
-version = "0.3.6"
+version = "0.3.7"
 description = "Attempt at a blazing fast, privacy centered, and modern file sharing service."
 authors = [
     { name = "iiPython", email = "ben@iipython.dev" }
@@ -11,6 +11,7 @@ dependencies = [
     "nanoid>=2.0.0",
     "redis[hiredis]>=5.0.4",
     "apscheduler>=3.10.4",
+    "python-multipart>=0.0.9",
 ]
 readme = "README.md"
 requires-python = ">= 3.11"

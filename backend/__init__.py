@@ -2,6 +2,7 @@
 
 # Modules
 import re
+import mimetypes
 from time import time
 from pathlib import Path
 
@@ -21,7 +22,7 @@ encryption_regex = re.compile(r"((?:\d{1,3},){11}\d{1,3})\.((?:\d{1,3},){15}\d{1
 
 # Handle uploading
 @app.post("/api/upload/start")
-async def start_upload(filename: str, header: str = None) -> JSONResponse:
+async def start_upload(filename: str, header: str | None = None) -> JSONResponse:
     iv, salt = None, None
     if header is not None:
         results = re.findall(encryption_regex, header)
@@ -107,5 +108,19 @@ frontend = Path(__file__).parent / "frontend"
 async def index() -> FileResponse:
     return FileResponse(frontend / "terminal.html")
 
-app.mount("/d", StaticFiles(directory = upload_location))
+@app.get("/d/{file_id}/{filename}", response_model = None)
+async def route_file_download(file_id: str, filename: str) -> FileResponse | JSONResponse:
+    file_path = upload_location / file_id / filename
+    if not (file_path.relative_to(upload_location) and file_path.is_file()):
+        return JSONResponse({"code": 404, "message": "Requested file not found."})
+
+    content_type = mimetypes.guess_type(filename)[0]
+    return FileResponse(
+        file_path,
+        headers = {
+            "Content-Type": content_type or "application/octet-stream",
+            "Content-Disposition": "inline" if content_type else "attachment"
+        }
+    )
+
 app.mount("/", StaticFiles(directory = frontend))
